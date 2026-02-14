@@ -2,7 +2,7 @@
     "manifest_version": 3,
     "name": "MyApps Launcher",
     "version": "1.0.0",
-    "description": "Quick access to your Microsoft MyApps applications with sections and drag-to-reorder. No sign-in required — uses your existing browser session.",
+    "description": "Quick access to your Microsoft MyApps with sections and drag-to-reorder.",
     "permissions": [
         "storage",
         "scripting",
