@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MyApps</title>
+    <link rel="stylesheet" href="popup.css" />
+</head>
+
+<body>
+    <div id="loading" class="loading">Loading your apps…</div>
+
+    <div id="main" class="main hidden">
+        <div class="sidebar">
+            <div class="sidebar-header">MyApps</div>
+            <ul id="section-list" class="section-list"></ul>
+            <div class="sidebar-footer">
+                <button id="add-section-btn" class="sidebar-btn" title="Add section">+ Section</button>
+                <button id="refresh-btn" class="sidebar-btn" title="Refresh apps">↻ Refresh</button>
+            </div>
+        </div>
+        <div class="content">
+            <div class="content-header">
+                <span id="section-title"></span>
+                <button id="rename-btn" class="content-btn" title="Rename section">✎</button>
+                <button id="delete-btn" class="content-btn" title="Delete section">✕</button>
+            </div>
+            <ul id="apps-list" class="apps-list"></ul>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>
