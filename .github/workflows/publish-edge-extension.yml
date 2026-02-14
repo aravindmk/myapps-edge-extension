@@ -1,0 +1,148 @@
+name: Publish Edge Extension
+
+on:
+  push:
+    tags:
+      - "v*" # Trigger on version tags like v1.0.0, v1.1.0
+
+  workflow_dispatch: # Allow manual trigger
+
+env:
+  EDGE_PRODUCT_ID: ${{ secrets.EDGE_PRODUCT_ID }}
+  EDGE_CLIENT_ID: ${{ secrets.EDGE_CLIENT_ID }}
+  EDGE_API_KEY: ${{ secrets.EDGE_API_KEY }}
+  API_BASE: https://api.addons.microsoftedge.microsoft.com
+
+jobs:
+  publish:
+    name: Package & Publish to Edge Add-ons
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create extension zip
+        run: |
+          zip -r ../extension.zip . -x "*.DS_Store" -x "__MACOSX/*"
+          cd ..
+          echo "Package size: $(du -h extension.zip | cut -f1)"
+
+      - name: Upload package to Edge Add-ons
+        id: upload
+        run: |
+          response=$(curl -s -w "\n%{http_code}\n%{header_json}" \
+            -H "Authorization: ApiKey $EDGE_API_KEY" \
+            -H "X-ClientID: $EDGE_CLIENT_ID" \
+            -H "Content-Type: application/zip" \
+            -X POST \
+            -T extension.zip \
+            "$API_BASE/v1/products/$EDGE_PRODUCT_ID/submissions/draft/package")
+
+          http_code=$(echo "$response" | tail -2 | head -1)
+          echo "Upload response code: $http_code"
+
+          if [ "$http_code" != "202" ]; then
+            echo "Upload failed with status $http_code"
+            echo "$response"
+            exit 1
+          fi
+
+          # Extract operation ID from Location header
+          operation_id=$(echo "$response" | grep -i "location" | grep -oP '[a-f0-9-]{36}' | tail -1)
+          echo "operation_id=$operation_id" >> "$GITHUB_OUTPUT"
+          echo "Upload accepted. Operation ID: $operation_id"
+
+      - name: Wait for upload to complete
+        run: |
+          operation_id="${{ steps.upload.outputs.operation_id }}"
+          max_retries=20
+          retry=0
+
+          while [ $retry -lt $max_retries ]; do
+            sleep 10
+
+            status_response=$(curl -s \
+              -H "Authorization: ApiKey $EDGE_API_KEY" \
+              -H "X-ClientID: $EDGE_CLIENT_ID" \
+              -X GET \
+              "$API_BASE/v1/products/$EDGE_PRODUCT_ID/submissions/draft/package/operations/$operation_id")
+
+            status=$(echo "$status_response" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+            echo "Upload status (attempt $((retry+1))): $status"
+
+            if [ "$status" = "Succeeded" ]; then
+              echo "Upload completed successfully"
+              break
+            elif [ "$status" = "Failed" ]; then
+              echo "Upload failed"
+              echo "$status_response"
+              exit 1
+            fi
+
+            retry=$((retry+1))
+          done
+
+          if [ $retry -ge $max_retries ]; then
+            echo "Upload timed out"
+            exit 1
+          fi
+
+      - name: Publish submission
+        id: publish
+        run: |
+          response=$(curl -s -w "\n%{http_code}" \
+            -H "Authorization: ApiKey $EDGE_API_KEY" \
+            -H "X-ClientID: $EDGE_CLIENT_ID" \
+            -H "Content-Type: application/json" \
+            -X POST \
+            -d '{"notes":"Automated publish via GitHub Actions"}' \
+            "$API_BASE/v1/products/$EDGE_PRODUCT_ID/submissions")
+
+          http_code=$(echo "$response" | tail -1)
+          echo "Publish response code: $http_code"
+
+          if [ "$http_code" != "202" ]; then
+            echo "Publish failed with status $http_code"
+            echo "$response"
+            exit 1
+          fi
+
+          operation_id=$(echo "$response" | grep -oP '[a-f0-9-]{36}' | tail -1)
+          echo "operation_id=$operation_id" >> "$GITHUB_OUTPUT"
+          echo "Publish accepted. Operation ID: $operation_id"
+
+      - name: Wait for publish to complete
+        run: |
+          operation_id="${{ steps.publish.outputs.operation_id }}"
+          max_retries=30
+          retry=0
+
+          while [ $retry -lt $max_retries ]; do
+            sleep 15
+
+            status_response=$(curl -s \
+              -H "Authorization: ApiKey $EDGE_API_KEY" \
+              -H "X-ClientID: $EDGE_CLIENT_ID" \
+              -X GET \
+              "$API_BASE/v1/products/$EDGE_PRODUCT_ID/submissions/operations/$operation_id")
+
+            status=$(echo "$status_response" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+            echo "Publish status (attempt $((retry+1))): $status"
+
+            if [ "$status" = "Succeeded" ]; then
+              echo "Extension published successfully!"
+              break
+            elif [ "$status" = "Failed" ]; then
+              echo "Publish failed"
+              echo "$status_response"
+              exit 1
+            fi
+
+            retry=$((retry+1))
+          done
+
+          if [ $retry -ge $max_retries ]; then
+            echo "Publish status check timed out — it may still be in review"
+            echo "Check Partner Center for the final status"
+          fi
