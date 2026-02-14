@@ -24,7 +24,7 @@ jobs:
 
       - name: Create extension zip
         run: |
-          zip -r ../extension.zip . -x "*.DS_Store" -x "__MACOSX/*"
+          zip -r extension.zip . -x "*.DS_Store" -x "__MACOSX/*"
           cd ..
           echo "Package size: $(du -h extension.zip | cut -f1)"
 
